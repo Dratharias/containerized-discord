@@ -55,11 +55,28 @@ mkdir -p "$PROFILE_DIR"
 # Without 'exec', the script would finish and the DE would think the app closed.
 
 if command -v firejail >/dev/null 2>&1; then
-    # Launch with Firejail for maximum security.
-    # The --x11 flag was removed as it can cause black screens on some systems (e.g., Wayland).
-    # Firejail will now auto-detect the correct display server settings.
+    # --- Smart Firefox Detection for Firejail ---
+    # Default to the standard 'firefox' command.
+    FIREFOX_CMD="firefox"
+    
+    # Check if the 'firefox' command resolves to a Snap package path.
+    # readlink -f gets the canonical path, which we check for '/snap/'.
+    if [[ "$(readlink -f "$(which firefox)")" == *"/snap/"* ]]; then
+        echo "Snap version of Firefox detected."
+        # If it's a Snap, check if a non-Snap version exists at the standard location.
+        if [ -f "/usr/bin/firefox" ]; then
+            echo "Found non-Snap Firefox at /usr/bin/firefox. Using it for Firejail."
+            # If it exists, we target it directly to avoid Snap/Firejail conflicts.
+            FIREFOX_CMD="/usr/bin/firefox"
+        else
+            echo "Warning: Could not find a non-Snap Firefox to use with Firejail."
+        fi
+    fi
+    
+    # Launch with Firejail, using the correctly determined Firefox command.
     exec firejail --private="$PROFILE_DIR" \
-         firefox --new-instance "https://discord.com/app"
+         "$FIREFOX_CMD" --new-instance "https://discord.com/app"
+
 elif command -v firefox >/dev/null 2>&1; then
     # Fallback to Firefox with a separate profile if Firejail isn't available.
     exec firefox --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
@@ -102,4 +119,3 @@ fi
 echo "Installation complete!"
 echo "You should now find 'Discord (Web)' in your application menu."
 echo "Note: You may need to log out and log back in for the shortcut to appear."
-

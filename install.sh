@@ -38,8 +38,11 @@ mkdir -p "$HOME/.local/bin"
 cat << 'EOF' > "$HOME/.local/bin/discord"
 #!/bin/bash
 
-PROFILE_DIR="$HOME/.local/share/discord-browser"
-mkdir -p "$PROFILE_DIR"
+BASE_PROFILE_DIR="$HOME/.local/share/discord-browser"
+mkdir -p "$BASE_PROFILE_DIR"
+
+# Create fresh temp profile directory per launch
+TMP_PROFILE_DIR=$(mktemp -d "$BASE_PROFILE_DIR/tmp-discord-sandbox")
 
 function can_use_bwrap_userns() {
     bwrap --unshare-user --ro-bind /usr /usr true >/dev/null 2>&1
@@ -57,7 +60,7 @@ if command -v bwrap >/dev/null 2>&1 && can_use_bwrap_userns; then
         --dev-bind /dev /dev \
         --proc /proc \
         --tmpfs /tmp \
-        --bind "$PROFILE_DIR" "$PROFILE_DIR" \
+        --bind "$TMP_PROFILE_DIR" "$TMP_PROFILE_DIR" \
         --setenv HOME "$HOME" \
         --setenv XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR" \
         --setenv DISPLAY "$DISPLAY" \
@@ -70,7 +73,7 @@ if command -v bwrap >/dev/null 2>&1 && can_use_bwrap_userns; then
         --ro-bind /bin /bin \
         --ro-bind /etc /etc \
         --ro-bind /tmp /tmp \
-        "$FIREFOX_CMD" --no-remote --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
+        "$FIREFOX_CMD" --no-remote --new-instance --profile "$TMP_PROFILE_DIR" "https://discord.com/app"
 
 else
     echo "Warning: Bubblewrap user namespaces unavailable or permission denied."
@@ -78,13 +81,15 @@ else
     echo "  sudo sysctl kernel.unprivileged_userns_clone=1"
     echo "  Ensure /etc/subuid and /etc/subgid are properly configured."
     if command -v firefox >/dev/null 2>&1; then
-        exec firefox --no-remote --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
+        TMP_PROFILE_DIR=$(mktemp -d "$BASE_PROFILE_DIR/tmp-discord-sandbox")
+        exec firefox --no-remote --new-instance --profile "$TMP_PROFILE_DIR" "https://discord.com/app"
     elif command -v chromium >/dev/null 2>&1; then
-        exec chromium --user-data-dir="$PROFILE_DIR" --new-window "https://discord.com/app"
+        exec chromium --user-data-dir="$BASE_PROFILE_DIR" --new-window "https://discord.com/app"
     else
         exec xdg-open "https://discord.com/app"
     fi
 fi
+
 EOF
 
 chmod +x "$HOME/.local/bin/discord"

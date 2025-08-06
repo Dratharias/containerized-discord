@@ -56,7 +56,9 @@ mkdir -p "$PROFILE_DIR"
 
 if command -v firejail >/dev/null 2>&1; then
     # Launch with Firejail for maximum security.
-    exec firejail --private="$PROFILE_DIR" --x11 \
+    # The --x11 flag was removed as it can cause black screens on some systems (e.g., Wayland).
+    # Firejail will now auto-detect the correct display server settings.
+    exec firejail --private="$PROFILE_DIR" \
          firefox --new-instance "https://discord.com/app"
 elif command -v firefox >/dev/null 2>&1; then
     # Fallback to Firefox with a separate profile if Firejail isn't available.
@@ -100,3 +102,4 @@ fi
 echo "Installation complete!"
 echo "You should now find 'Discord (Web)' in your application menu."
 echo "Note: You may need to log out and log back in for the shortcut to appear."
+

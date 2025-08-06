@@ -64,7 +64,5 @@ Categories=Network;Chat;
 EOF
 
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-
-echo "Discord launcher installed."
-echo "Recommendation: Install firejail for better isolation"
-echo "Add ~/.local/bin to PATH if needed"
+export PATH="$HOME/.local/bin:$PATH"
+source ~/.bashrc

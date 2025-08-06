@@ -44,6 +44,11 @@ mkdir -p "$BASE_PROFILE_DIR"
 # Create fresh temp profile directory per launch
 TMP_PROFILE_DIR=$(mktemp -d "$BASE_PROFILE_DIR/tmp-discord-sandbox")
 
+# Create Firefox profile if not already present
+if [ ! -f "$TMP_PROFILE_DIR/profile.ini" ]; then
+    firefox --no-remote -CreateProfile "sandbox $TMP_PROFILE_DIR"
+fi
+
 function can_use_bwrap_userns() {
     bwrap --unshare-user --ro-bind /usr /usr true >/dev/null 2>&1
 }

@@ -41,8 +41,13 @@ cat << 'EOF' > "$HOME/.local/bin/discord"
 PROFILE_DIR="$HOME/.local/share/discord-browser"
 mkdir -p "$PROFILE_DIR"
 
-if command -v bwrap >/dev/null 2>&1; then
-    # Determine Firefox command avoiding snap conflicts
+# Function to test if bwrap user namespaces work
+function can_use_bwrap_userns() {
+    # bubblewrap with --unshare-user tries to create userns; suppress output
+    bwrap --unshare-user --ro-bind /usr /usr true >/dev/null 2>&1
+}
+
+if command -v bwrap >/dev/null 2>&1 && can_use_bwrap_userns; then
     FIREFOX_CMD="firefox"
     if [[ "$(readlink -f "$(which firefox)")" == *"/snap/"* ]]; then
         if [ -f "/usr/bin/firefox" ]; then
@@ -50,7 +55,6 @@ if command -v bwrap >/dev/null 2>&1; then
         fi
     fi
 
-    # Setup a minimal Bubblewrap sandbox for the browser profile dir
     exec bwrap \
         --dev-bind /dev /dev \
         --proc /proc \
@@ -70,12 +74,18 @@ if command -v bwrap >/dev/null 2>&1; then
         --ro-bind /tmp /tmp \
         "$FIREFOX_CMD" --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
 
-elif command -v firefox >/dev/null 2>&1; then
-    exec firefox --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
-elif command -v chromium >/dev/null 2>&1; then
-    exec chromium --user-data-dir="$PROFILE_DIR" --new-window "https://discord.com/app"
 else
-    exec xdg-open "https://discord.com/app"
+    echo "Warning: Bubblewrap user namespaces unavailable or permission denied."
+    echo "Launching without sandbox. Consider enabling user namespaces:"
+    echo "  sudo sysctl kernel.unprivileged_userns_clone=1"
+    echo "  Ensure /etc/subuid and /etc/subgid are properly configured."
+    if command -v firefox >/dev/null 2>&1; then
+        exec firefox --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
+    elif command -v chromium >/dev/null 2>&1; then
+        exec chromium --user-data-dir="$PROFILE_DIR" --new-window "https://discord.com/app"
+    else
+        exec xdg-open "https://discord.com/app"
+    fi
 fi
 EOF
 

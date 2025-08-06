@@ -5,6 +5,13 @@ set -e
 # Ensure ~/bin exists
 mkdir -p "$HOME/bin"
 
+# Copy logo to a standard icon location
+ICON_SRC="$(pwd)/logo/jailed-discord.png"
+ICON_DEST="$HOME/.local/share/icons/jailed-discord.png"
+
+mkdir -p "$(dirname "$ICON_DEST")"
+cp -f "$ICON_SRC" "$ICON_DEST"
+
 # Create the script to run Discord container
 cat << 'EOF' > "$HOME/bin/discord"
 #!/bin/bash
@@ -25,7 +32,7 @@ cat << EOF > "$HOME/.local/share/applications/discord.desktop"
 Name=Discord (Isolated)
 Comment=Run Discord in Docker-contained Firefox
 Exec=$HOME/bin/discord
-Icon=$HOME/containerized-discord/assets/discord.png
+Icon=$ICON_DEST
 Terminal=false
 Type=Application
 Categories=Network;Chat;

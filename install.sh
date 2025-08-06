@@ -37,7 +37,7 @@ mkdir -p "$PROFILE_DIR"
 
 # Use firejail if available, otherwise use browser with isolated profile
 if command -v firejail >/dev/null 2>&1; then
-    firejail --private="$PROFILE_DIR" --netfilter \
+    firejail --private="$PROFILE_DIR" --x11 \
              firefox --new-instance "https://discord.com/app"
 elif command -v firefox >/dev/null 2>&1; then
     firefox --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"

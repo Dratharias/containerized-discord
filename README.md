@@ -5,7 +5,7 @@ This project runs Discord in an isolated Docker Firefox container.
 ### 🔧 Installation
 
 ```bash
-git clone https://github.com/Dratharias/containerized-discord.git
+git clone git@github.com:Dratharias/containerized-discord.git
 cd containerized-discord
 ./install.sh
 ```

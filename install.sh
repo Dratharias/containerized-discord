@@ -1,98 +1,87 @@
 #!/bin/bash
-# This script creates an isolated, sandboxed shortcut for the Discord web app.
+# This script creates an isolated, sandboxed shortcut for the Discord web app using Bubblewrap.
 
-# Exit immediately if a command exits with a non-zero status.
 set -e
 
-# --- Install Firejail (Sandboxing Tool) ---
-# Check if firejail is installed. If not, try to install it using a common package manager.
-if ! command -v firejail >/dev/null 2>&1; then
-    echo "Firejail not found. Attempting to install..."
+# --- Check for Bubblewrap ---
+if ! command -v bwrap >/dev/null 2>&1; then
+    echo "Bubblewrap not found. Attempting to install..."
     
     if command -v apt >/dev/null 2>&1; then
-        sudo apt update && sudo apt install -y firejail
+        sudo apt update && sudo apt install -y bubblewrap
     elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --noconfirm firejail
+        sudo pacman -S --noconfirm bubblewrap
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y firejail
+        sudo dnf install -y bubblewrap
     elif command -v zypper >/dev/null 2>&1; then
-        sudo zypper install -y firejail
+        sudo zypper install -y bubblewrap
     else
-        echo "Warning: Could not install firejail automatically. Please install it manually for sandboxing."
+        echo "Warning: Could not install bubblewrap automatically. Please install it manually for sandboxing."
         echo "The script will proceed using browser-profile isolation instead."
     fi
 fi
 
-# --- Set up Paths and Icon ---
-# Define the source and destination for the application icon.
-# Note: This script assumes an icon exists at './logo/jailed-discord.png' relative to where the script is run.
+# --- Set up Icon ---
 ICON_SRC="$(pwd)/logo/jailed-discord.png"
 ICON_DEST="$HOME/.local/share/icons/jailed-discord.png"
 
-# Create the destination directory and copy the icon.
 mkdir -p "$(dirname "$ICON_DEST")"
 if [ -f "$ICON_SRC" ]; then
     cp -f "$ICON_SRC" "$ICON_DEST"
 else
     echo "Warning: Icon file not found at '$ICON_SRC'. A default icon may be used."
-    # As a fallback, we won't create an Icon entry if the source doesn't exist.
     ICON_DEST=""
 fi
 
-
-# --- Create the Launcher Script ---
-# This script is what the .desktop shortcut will execute.
+# --- Create launcher script ---
 mkdir -p "$HOME/.local/bin"
 cat << 'EOF' > "$HOME/.local/bin/discord"
 #!/bin/bash
 
-# Define a dedicated directory for the browser profile to keep it separate.
 PROFILE_DIR="$HOME/.local/share/discord-browser"
 mkdir -p "$PROFILE_DIR"
 
-# The 'exec' command replaces the shell script process with the browser process.
-# This is crucial for .desktop files to correctly track the application window.
-# Without 'exec', the script would finish and the DE would think the app closed.
-
-if command -v firejail >/dev/null 2>&1; then
-    # --- Smart Firefox Detection for Firejail ---
-    # Default to the standard 'firefox' command.
+if command -v bwrap >/dev/null 2>&1; then
+    # Determine Firefox command avoiding snap conflicts
     FIREFOX_CMD="firefox"
-    
-    # Check if the 'firefox' command resolves to a Snap package path.
-    # readlink -f gets the canonical path, which we check for '/snap/'.
     if [[ "$(readlink -f "$(which firefox)")" == *"/snap/"* ]]; then
-        echo "Snap version of Firefox detected."
-        # If it's a Snap, check if a non-Snap version exists at the standard location.
         if [ -f "/usr/bin/firefox" ]; then
-            echo "Found non-Snap Firefox at /usr/bin/firefox. Using it for Firejail."
-            # If it exists, we target it directly to avoid Snap/Firejail conflicts.
             FIREFOX_CMD="/usr/bin/firefox"
-        else
-            echo "Warning: Could not find a non-Snap Firefox to use with Firejail."
         fi
     fi
-    
-    # Launch with Firejail, using the correctly determined Firefox command.
-    exec firejail --private="$PROFILE_DIR" \
-         "$FIREFOX_CMD" --new-instance "https://discord.com/app"
+
+    # Setup a minimal Bubblewrap sandbox for the browser profile dir
+    exec bwrap \
+        --dev-bind /dev /dev \
+        --proc /proc \
+        --tmpfs /tmp \
+        --bind "$PROFILE_DIR" "$PROFILE_DIR" \
+        --setenv HOME "$HOME" \
+        --setenv XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR" \
+        --setenv DISPLAY "$DISPLAY" \
+        --setenv WAYLAND_DISPLAY "$WAYLAND_DISPLAY" \
+        --setenv PULSE_SERVER "$PULSE_SERVER" \
+        --setenv XDG_DATA_HOME "$XDG_DATA_HOME" \
+        --ro-bind /usr /usr \
+        --ro-bind /lib /lib \
+        --ro-bind /lib64 /lib64 \
+        --ro-bind /bin /bin \
+        --ro-bind /etc /etc \
+        --ro-bind /tmp /tmp \
+        "$FIREFOX_CMD" --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
 
 elif command -v firefox >/dev/null 2>&1; then
-    # Fallback to Firefox with a separate profile if Firejail isn't available.
     exec firefox --new-instance --profile "$PROFILE_DIR" "https://discord.com/app"
 elif command -v chromium >/dev/null 2>&1; then
-    # Fallback to Chromium if Firefox isn't available.
     exec chromium --user-data-dir="$PROFILE_DIR" --new-window "https://discord.com/app"
 else
-    # Final fallback to the system's default browser handler.
     exec xdg-open "https://discord.com/app"
 fi
 EOF
 
-# Make the launcher script executable.
 chmod +x "$HOME/.local/bin/discord"
 
-# --- Create the .desktop Application Shortcut ---
+# --- Create the .desktop shortcut ---
 mkdir -p "$HOME/.local/share/applications"
 cat << EOF > "$HOME/.local/share/applications/discord.desktop"
 [Desktop Entry]
@@ -105,17 +94,14 @@ Type=Application
 Categories=Network;Chat;
 EOF
 
-# --- Finalize ---
-# Update the system's application database to make the new shortcut visible.
 echo "Updating application database..."
 update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
 
-# Add the local bin directory to PATH for the current session if it's not there.
-# This is mainly for convenience if you want to run 'discord' from the terminal.
+# Add local bin to PATH in current session if needed
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
 echo "Installation complete!"
 echo "You should now find 'Discord (Web)' in your application menu."
-echo "Note: You may need to log out and log back in for the shortcut to appear."
+echo "You may need to log out and back in for changes to take effect."
